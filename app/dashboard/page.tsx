@@ -60,21 +60,19 @@ export default function CasinoDashboard() {
     router.push('/');
   };
 
-  // In your app/dashboard/page.tsx, replace the playGame function with:
-
-const playGame = (gameType: string) => {
-  if (!userData) return;
-  
-  if (gameType === 'slots') {
-    // Navigate to slots page
-    router.push('/slots');
-  } else if (gameType === 'history') {
-    // Show game history
-    alert(`📈 Game History:\n\n🃏 Poker: 3 wins, 2 losses\n🂡 Blackjack: 1 win, 1 loss\n🎡 Roulette: 0 wins, 2 losses\n\nTotal: +$150 tonight!`);
-  } else {
-    alert(`🎰 Starting ${gameType.toUpperCase()}!\n\nPlayer: ${userData.username}\nBalance: $${userData.chips.toLocaleString()}\n\n(Game integration with n8n coming soon!)`);
-  }
-};
+  const playGame = (gameType: string) => {
+    if (!userData) return;
+    
+    if (gameType === 'slots') {
+      // Navigate to slots page
+      router.push('/slots');
+    } else if (gameType === 'history') {
+      // Show game history
+      alert(`📈 Game History:\n\n🃏 Poker: 3 wins, 2 losses\n🂡 Blackjack: 1 win, 1 loss\n🎡 Roulette: 0 wins, 2 losses\n\nTotal: +$150 tonight!`);
+    } else {
+      alert(`🎰 Starting ${gameType.toUpperCase()}!\n\nPlayer: ${userData.username}\nBalance: $${userData.chips.toLocaleString()}\n\n(Game integration with n8n coming soon!)`);
+    }
+  };
 
   if (loading) {
     return (
@@ -115,7 +113,6 @@ const playGame = (gameType: string) => {
       </div>
 
       {/* Games grid */}
-              {/* Games grid */}
       <div className="mb-12">
         <h2 className="text-4xl font-bold text-center text-yellow-400 mb-8">🎲 Casino Floor</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -174,3 +171,5 @@ const playGame = (gameType: string) => {
         <div>🎰 Ready to Play</div>
       </div>
     </div>
+  );
+}
