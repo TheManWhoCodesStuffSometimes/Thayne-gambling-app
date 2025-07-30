@@ -173,3 +173,4 @@ const playGame = (gameType: string) => {
         <div>✅ Session Active</div>
         <div>🎰 Ready to Play</div>
       </div>
+    </div>
