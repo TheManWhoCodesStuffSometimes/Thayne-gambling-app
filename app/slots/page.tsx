@@ -85,6 +85,7 @@ export default function SlotsPage() {
   const [reels, setReels] = useState<string[][]>([]);
   const [reelSymbols, setReelSymbols] = useState<string[][]>([]);
   const [winningPositions, setWinningPositions] = useState<{col: number, row: number, lineIndex: number}[]>([]);
+  const [winPopup, setWinPopup] = useState<{show: boolean, amount: number}>({show: false, amount: 0});
   const [showPaytable, setShowPaytable] = useState(false);
 
   useEffect(() => {
@@ -336,7 +337,13 @@ export default function SlotsPage() {
             chips: finalBalance
           }));
           
-          setResultMessage(`${result.winTypes.join(', ')}! You won $${result.winnings}!`);
+          // Show win popup
+          setWinPopup({show: true, amount: result.winnings});
+          setTimeout(() => {
+            setWinPopup({show: false, amount: 0});
+          }, 2000);
+          
+          setResultMessage(`${result.winTypes.join(', ')}! You won ${result.winnings}!`);
           setResultType('win');
           setWinningPositions(result.winningPositions);
           recordGameResult(true, result.winnings, currentBet, result.diamondCount);
@@ -505,7 +512,7 @@ export default function SlotsPage() {
                       className={`w-16 h-16 md:w-24 md:h-24 bg-gradient-to-br from-slate-700 to-slate-800 border-2 md:border-3 border-teal-400 rounded-lg md:rounded-xl flex items-center justify-center text-3xl md:text-5xl transition-all duration-500 relative ${
                         isSpinning ? 'animate-bounce' : ''
                       } ${
-                        isWinning ? 'bg-gradient-to-br from-yellow-400 to-yellow-500 border-red-400 shadow-lg shadow-yellow-400/60 animate-pulse' : ''
+                        isWinning ? 'bg-gradient-to-br from-yellow-400 to-yellow-600 border-yellow-300 text-yellow-900 animate-spin' : ''
                       } ${
                         isDiamondAnimating ? 'animate-ping bg-gradient-to-br from-purple-400 to-pink-500' : ''
                       }`}
@@ -535,6 +542,18 @@ export default function SlotsPage() {
               </div>
             ))}
           </div>
+
+          {/* Win Popup */}
+          {winPopup.show && (
+            <div className="absolute inset-0 flex items-center justify-center z-50 pointer-events-none">
+              <div className="bg-gradient-to-br from-yellow-400 to-yellow-600 text-slate-900 px-8 py-6 rounded-2xl border-4 border-yellow-300 shadow-2xl shadow-yellow-400/80 animate-bounce">
+                <div className="text-center">
+                  <div className="text-2xl md:text-4xl font-black mb-2">🎉 WIN! 🎉</div>
+                  <div className="text-xl md:text-2xl font-bold">+${winPopup.amount}</div>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Controls - Mobile Optimized */}
           <div className="text-center space-y-4">
@@ -606,6 +625,15 @@ export default function SlotsPage() {
           100% {
             transform: translateY(-200px) scale(0.5);
             opacity: 0;
+          }
+        }
+        
+        @keyframes spin {
+          from {
+            transform: rotate(0deg);
+          }
+          to {
+            transform: rotate(360deg);
           }
         }
       `}</style>
