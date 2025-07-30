@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 
 interface UserData {
@@ -10,7 +10,7 @@ interface UserData {
   loginTime: string;
 }
 
-export default function CasinoDashboard() {
+function DashboardContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [userData, setUserData] = useState<UserData | null>(null);
@@ -171,5 +171,20 @@ export default function CasinoDashboard() {
         <div>🎰 Ready to Play</div>
       </div>
     </div>
+  );
+}
+
+export default function CasinoDashboard() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-yellow-400 mx-auto mb-4"></div>
+          <p className="text-yellow-400 text-xl">Loading casino...</p>
+        </div>
+      </div>
+    }>
+      <DashboardContent />
+    </Suspense>
   );
 }
