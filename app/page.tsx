@@ -25,7 +25,7 @@ export default function CasinoLogin() {
     setStatusType('success');
 
     try {
-      const response = await fetch('https://thayne-workflows.themanwhocodesstuffsometimes.com/webhook/casino-login', {
+      const response = await fetch('https://thayneautomations.app.n8n.cloud/webhook/casino-validate-user', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
