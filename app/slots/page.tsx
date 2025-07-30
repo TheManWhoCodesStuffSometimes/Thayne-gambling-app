@@ -24,6 +24,15 @@ interface Symbol {
   emoji: string;
   weight: number;
   value: number;
+  name: string;
+}
+
+interface PaylineResult {
+  isWin: boolean;
+  winnings: number;
+  winType: string;
+  positions: {col: number, row: number}[];
+  lineIndex: number;
 }
 
 export default function SlotsPage() {
@@ -33,6 +42,8 @@ export default function SlotsPage() {
   const [isSpinning, setIsSpinning] = useState(false);
   const [resultMessage, setResultMessage] = useState('Place your bet and spin to win!');
   const [resultType, setResultType] = useState<'win' | 'lose' | 'jackpot' | ''>('');
+  const [jackpotAmount, setJackpotAmount] = useState(5000);
+  const [diamondAnimation, setDiamondAnimation] = useState<{col: number, row: number}[]>([]);
   const [sessionStats, setSessionStats] = useState<SessionStats>({
     totalGames: 0,
     totalWins: 0,
@@ -43,20 +54,38 @@ export default function SlotsPage() {
     sessionStart: new Date()
   });
 
-  // Slot symbols with weights for 55% player advantage
+  // Enhanced symbols with treasure theme
   const symbols: Symbol[] = [
-    { emoji: '🍒', weight: 20, value: 2 },
-    { emoji: '🍋', weight: 18, value: 3 },
-    { emoji: '🍊', weight: 16, value: 4 },
-    { emoji: '🍇', weight: 14, value: 5 },
-    { emoji: '🔔', weight: 12, value: 8 },
-    { emoji: '⭐', weight: 10, value: 10 },
-    { emoji: '💎', weight: 6, value: 15 },
-    { emoji: '7️⃣', weight: 4, value: 25 }
+    { emoji: '🍎', weight: 25, value: 1, name: 'Apple' },
+    { emoji: '🪙', weight: 20, value: 2, name: 'Coin' },
+    { emoji: '💰', weight: 18, value: 3, name: 'Money Bag' },
+    { emoji: '💳', weight: 15, value: 4, name: 'Credit Card' },
+    { emoji: '👑', weight: 12, value: 6, name: 'Crown' },
+    { emoji: '🏆', weight: 8, value: 10, name: 'Trophy' },
+    { emoji: '💍', weight: 6, value: 15, name: 'Ring' },
+    { emoji: '💎', weight: 4, value: 25, name: 'Diamond' }
+  ];
+
+  // Define 9 paylines (all starting from leftmost column)
+  const paylines = [
+    // Horizontal lines
+    [[0,0], [1,0], [2,0], [3,0], [4,0]], // Top row
+    [[0,1], [1,1], [2,1], [3,1], [4,1]], // Middle row
+    [[0,2], [1,2], [2,2], [3,2], [4,2]], // Bottom row
+    // Diagonal lines
+    [[0,0], [1,1], [2,2], [3,1], [4,0]], // V shape
+    [[0,2], [1,1], [2,0], [3,1], [4,2]], // ^ shape
+    // Zigzag lines
+    [[0,0], [1,2], [2,1], [3,2], [4,0]], // W shape
+    [[0,2], [1,0], [2,1], [3,0], [4,2]], // M shape
+    [[0,1], [1,0], [2,2], [3,0], [4,1]], // Lightning 1
+    [[0,1], [1,2], [2,0], [3,2], [4,1]]  // Lightning 2
   ];
 
   const [reels, setReels] = useState<string[][]>([]);
-  const [winningPositions, setWinningPositions] = useState<{col: number, row: number}[]>([]);
+  const [reelSymbols, setReelSymbols] = useState<string[][]>([]);
+  const [winningPositions, setWinningPositions] = useState<{col: number, row: number, lineIndex: number}[]>([]);
+  const [showPaytable, setShowPaytable] = useState(false);
 
   useEffect(() => {
     // Get user data from sessionStorage
@@ -86,16 +115,29 @@ export default function SlotsPage() {
     return pool[Math.floor(Math.random() * pool.length)];
   };
 
+  const generateReelStrip = () => {
+    const strip: string[] = [];
+    for (let i = 0; i < 20; i++) { // Longer strip for smooth animation
+      strip.push(getRandomSymbol().emoji);
+    }
+    return strip;
+  };
+
   const initializeReels = () => {
     const newReels: string[][] = [];
+    const newReelSymbols: string[][] = [];
+    
     for (let col = 0; col < 5; col++) {
-      const column: string[] = [];
-      for (let row = 0; row < 3; row++) {
-        column.push(getRandomSymbol().emoji);
-      }
-      newReels.push(column);
+      const reelStrip = generateReelStrip();
+      newReelSymbols.push(reelStrip);
+      
+      // Show initial 3 symbols
+      const visibleSymbols = reelStrip.slice(0, 3);
+      newReels.push(visibleSymbols);
     }
+    
     setReels(newReels);
+    setReelSymbols(newReelSymbols);
   };
 
   const setBetAmount = (amount: number) => {
@@ -103,7 +145,7 @@ export default function SlotsPage() {
     setCurrentBet(amount);
   };
 
-  const recordGameResult = (isWin: boolean, amount: number, betAmount: number) => {
+  const recordGameResult = (isWin: boolean, amount: number, betAmount: number, diamondCount: number = 0) => {
     setSessionStats(prev => {
       const newStats = { ...prev };
       newStats.totalGames++;
@@ -121,121 +163,104 @@ export default function SlotsPage() {
       
       return newStats;
     });
+
+    // Update jackpot with diamonds
+    if (diamondCount > 0) {
+      setJackpotAmount(prev => prev + (diamondCount * 100));
+    }
   };
 
-  const calculateWin = (results: Symbol[][]) => {
+  const checkPaylines = (finalReels: Symbol[][]) => {
     let totalWinnings = 0;
-    let winType = '';
-    let positions: {col: number, row: number}[] = [];
+    let allWinningPositions: {col: number, row: number, lineIndex: number}[] = [];
+    let winTypes: string[] = [];
+    let diamondPositions: {col: number, row: number}[] = [];
 
-    // Check horizontal lines
-    for (let row = 0; row < 3; row++) {
-      const lineSymbols = results.map(col => col[row]);
-      const lineResult = checkLine(lineSymbols, row, 'horizontal');
+    // Count diamonds for jackpot contribution
+    let diamondCount = 0;
+    finalReels.forEach((column, colIndex) => {
+      column.forEach((symbol, rowIndex) => {
+        if (symbol.emoji === '💎') {
+          diamondCount++;
+          diamondPositions.push({col: colIndex, row: rowIndex});
+        }
+      });
+    });
+
+    // Check each payline
+    paylines.forEach((line, lineIndex) => {
+      const lineSymbols = line.map(([col, row]) => finalReels[col][row]);
+      const result = checkSinglePayline(lineSymbols, lineIndex, line);
       
-      if (lineResult.winnings > 0) {
-        totalWinnings += lineResult.winnings;
-        winType = lineResult.type;
-        positions = positions.concat(lineResult.positions);
+      if (result.isWin) {
+        totalWinnings += result.winnings;
+        winTypes.push(result.winType);
+        allWinningPositions = allWinningPositions.concat(
+          result.positions.map(pos => ({...pos, lineIndex}))
+        );
       }
-    }
+    });
 
-    // Check diagonals
-    const diagonal1 = [results[0][0], results[1][1], results[2][2], results[3][1], results[4][0]];
-    const diagonal2 = [results[0][2], results[1][1], results[2][0], results[3][1], results[4][2]];
-
-    const diag1Result = checkLineDiagonal(diagonal1, 'diagonal1');
-    const diag2Result = checkLineDiagonal(diagonal2, 'diagonal2');
-
-    if (diag1Result.winnings > 0) {
-      totalWinnings += diag1Result.winnings;
-      winType = diag1Result.type;
-      positions = positions.concat(diag1Result.positions);
-    }
-
-    if (diag2Result.winnings > 0) {
-      totalWinnings += diag2Result.winnings;
-      winType = diag2Result.type;
-      positions = positions.concat(diag2Result.positions);
+    // Enhanced payouts for 55% player advantage
+    if (totalWinnings > 0) {
+      totalWinnings = Math.floor(totalWinnings * 1.4); // 40% bonus to payouts
     }
 
     return {
       isWin: totalWinnings > 0,
       winnings: totalWinnings,
-      winType,
-      winningPositions: positions
+      winTypes,
+      winningPositions: allWinningPositions,
+      diamondCount,
+      diamondPositions
     };
   };
 
-  const checkLine = (lineSymbols: Symbol[], rowIndex: number, lineType: string) => {
-    for (let start = 0; start <= 2; start++) {
-      let count = 1;
-      let symbol = lineSymbols[start];
-      
-      for (let i = start + 1; i < 5; i++) {
-        if (lineSymbols[i].emoji === symbol.emoji) {
-          count++;
-        } else {
-          break;
-        }
-      }
-      
-      if (count >= 3) {
-        let multiplier = count === 3 ? 1 : count === 4 ? 3 : 8;
-        let winnings = currentBet * symbol.value * multiplier;
-        
-        let positions = [];
-        for (let i = start; i < start + count; i++) {
-          positions.push({ col: i, row: rowIndex });
-        }
-        
-        return {
-          winnings,
-          type: symbol.emoji === '7️⃣' && count >= 4 ? 'JACKPOT' : 'WIN',
-          positions
-        };
+  const checkSinglePayline = (lineSymbols: Symbol[], lineIndex: number, positions: number[][]) => {
+    let consecutiveCount = 1;
+    const firstSymbol = lineSymbols[0];
+    
+    // Count consecutive matching symbols from left
+    for (let i = 1; i < lineSymbols.length; i++) {
+      if (lineSymbols[i].emoji === firstSymbol.emoji) {
+        consecutiveCount++;
+      } else {
+        break;
       }
     }
     
-    return { winnings: 0, type: '', positions: [] };
+    // Need at least 3 consecutive symbols to win
+    if (consecutiveCount >= 3) {
+      const baseWinnings = currentBet * firstSymbol.value;
+      let multiplier = 1;
+      
+      if (consecutiveCount === 4) multiplier = 3;
+      else if (consecutiveCount === 5) multiplier = 10;
+      
+      const winnings = baseWinnings * multiplier;
+      const winPositions = positions.slice(0, consecutiveCount).map(([col, row]) => ({col, row}));
+      
+      return {
+        isWin: true,
+        winnings,
+        winType: firstSymbol.emoji === '💎' ? 'DIAMOND WIN' : 'WIN',
+        positions: winPositions
+      };
+    }
+    
+    return {
+      isWin: false,
+      winnings: 0,
+      winType: '',
+      positions: []
+    };
   };
 
-  const checkLineDiagonal = (lineSymbols: Symbol[], diagonalType: string) => {
-    // Similar logic for diagonal checking
-    for (let start = 0; start <= 2; start++) {
-      let count = 1;
-      let symbol = lineSymbols[start];
-      
-      for (let i = start + 1; i < 5; i++) {
-        if (lineSymbols[i].emoji === symbol.emoji) {
-          count++;
-        } else {
-          break;
-        }
-      }
-      
-      if (count >= 3) {
-        let multiplier = count === 3 ? 1 : count === 4 ? 3 : 8;
-        let winnings = currentBet * symbol.value * multiplier;
-        
-        let positions = [];
-        for (let i = start; i < start + count; i++) {
-          if (diagonalType === 'diagonal1') {
-            positions.push({ col: i, row: i === 2 ? 2 : i === 1 || i === 3 ? 1 : 0 });
-          } else {
-            positions.push({ col: i, row: i === 0 || i === 4 ? 2 : i === 2 ? 0 : 1 });
-          }
-        }
-        
-        return {
-          winnings,
-          type: symbol.emoji === '7️⃣' && count >= 4 ? 'JACKPOT' : 'WIN',
-          positions
-        };
-      }
-    }
-    
-    return { winnings: 0, type: '', positions: [] };
+  const animateDiamonds = (positions: {col: number, row: number}[]) => {
+    setDiamondAnimation(positions);
+    setTimeout(() => {
+      setDiamondAnimation([]);
+    }, 2000);
   };
 
   const spin = async () => {
@@ -248,7 +273,7 @@ export default function SlotsPage() {
     }
 
     setIsSpinning(true);
-    setResultMessage('Spinning...');
+    setResultMessage('Spinning the reels...');
     setResultType('');
     setWinningPositions([]);
 
@@ -256,55 +281,77 @@ export default function SlotsPage() {
     const newBalance = userData.chips - currentBet;
     setUserData(prev => prev ? { ...prev, chips: newBalance } : null);
     
-    // Update sessionStorage
     sessionStorage.setItem('casinoUser', JSON.stringify({
       ...userData,
       chips: newBalance
     }));
 
-    // Simulate spinning animation
-    setTimeout(() => {
-      // Generate new results
-      const results: Symbol[][] = [];
-      for (let col = 0; col < 5; col++) {
-        const column: Symbol[] = [];
-        for (let row = 0; row < 3; row++) {
-          column.push(getRandomSymbol());
-        }
-        results.push(column);
+    // Generate final results
+    const finalResults: Symbol[][] = [];
+    for (let col = 0; col < 5; col++) {
+      const column: Symbol[] = [];
+      for (let row = 0; row < 3; row++) {
+        column.push(getRandomSymbol());
       }
+      finalResults.push(column);
+    }
 
-      // Update reels display
-      const newReelsDisplay = results.map(col => col.map(symbol => symbol.emoji));
-      setReels(newReelsDisplay);
-
-      // Calculate win
-      const { isWin, winnings, winType, winningPositions } = calculateWin(results);
+    // Animate reels spinning
+    const spinDuration = 2000;
+    const spinInterval = 100;
+    let spinCounter = 0;
+    
+    const spinAnimation = setInterval(() => {
+      setReels(prev => {
+        return prev.map((reel, colIndex) => {
+          // Generate random symbols during spin
+          return [
+            getRandomSymbol().emoji,
+            getRandomSymbol().emoji,
+            getRandomSymbol().emoji
+          ];
+        });
+      });
       
-      if (isWin) {
-        const finalBalance = newBalance + winnings;
-        setUserData(prev => prev ? { ...prev, chips: finalBalance } : null);
-        sessionStorage.setItem('casinoUser', JSON.stringify({
-          ...userData,
-          chips: finalBalance
-        }));
+      spinCounter++;
+      if (spinCounter >= spinDuration / spinInterval) {
+        clearInterval(spinAnimation);
         
-        setResultMessage(`${winType}! You won $${winnings}!`);
-        setResultType(winType === 'JACKPOT' ? 'jackpot' : 'win');
-        setWinningPositions(winningPositions);
-        recordGameResult(true, winnings, currentBet);
-      } else {
-        setResultMessage('No luck this time. Try again!');
-        setResultType('lose');
-        recordGameResult(false, 0, currentBet);
+        // Set final results
+        const finalReelsDisplay = finalResults.map(col => col.map(symbol => symbol.emoji));
+        setReels(finalReelsDisplay);
+        
+        // Calculate win
+        const result = checkPaylines(finalResults);
+        
+        if (result.diamondCount > 0) {
+          animateDiamonds(result.diamondPositions);
+        }
+        
+        if (result.isWin) {
+          const finalBalance = newBalance + result.winnings;
+          setUserData(prev => prev ? { ...prev, chips: finalBalance } : null);
+          sessionStorage.setItem('casinoUser', JSON.stringify({
+            ...userData,
+            chips: finalBalance
+          }));
+          
+          setResultMessage(`${result.winTypes.join(', ')}! You won $${result.winnings}!`);
+          setResultType('win');
+          setWinningPositions(result.winningPositions);
+          recordGameResult(true, result.winnings, currentBet, result.diamondCount);
+        } else {
+          setResultMessage('No winning combinations. Try again!');
+          setResultType('lose');
+          recordGameResult(false, 0, currentBet, result.diamondCount);
+        }
+
+        setTimeout(() => {
+          setIsSpinning(false);
+          setWinningPositions([]);
+        }, 3000);
       }
-
-      setTimeout(() => {
-        setIsSpinning(false);
-        setWinningPositions([]);
-      }, 2000);
-
-    }, 1500);
+    }, spinInterval);
   };
 
   const goBack = () => {
@@ -355,32 +402,69 @@ export default function SlotsPage() {
         ← Dashboard
       </button>
 
-      {/* Header */}
+      {/* Paytable button */}
+      <button
+        onClick={() => setShowPaytable(!showPaytable)}
+        className="fixed top-5 right-20 z-50 px-6 py-3 bg-purple-600/80 hover:bg-purple-600 rounded-xl font-bold transition-all duration-300 hover:-translate-y-1"
+      >
+        {showPaytable ? 'Hide' : 'Show'} Paytable
+      </button>
+
+      {/* Header with Jackpot */}
       <header className="bg-slate-800/95 backdrop-blur-xl border-b-2 border-yellow-500 p-4 sticky top-0 z-40">
-        <div className="flex justify-between items-center max-w-4xl mx-auto">
-          <h1 className="text-3xl font-bold text-yellow-400">🎰 Lucky Slots</h1>
+        <div className="flex justify-between items-center max-w-6xl mx-auto">
+          <div className="flex items-center gap-8">
+            <h1 className="text-3xl font-bold text-yellow-400">🎰 Diamond Fortune</h1>
+            <div className="bg-gradient-to-r from-purple-600 to-pink-600 px-8 py-4 rounded-full border-4 border-yellow-400 animate-pulse">
+              <div className="text-yellow-400 text-sm font-bold uppercase tracking-wider mb-1">💎 JACKPOT 💎</div>
+              <div className="text-white text-2xl font-black">${jackpotAmount.toLocaleString()}</div>
+            </div>
+          </div>
           <div className="flex items-center gap-6">
-            <div className="text-green-400 text-lg">Good luck, {userData.username}!</div>
-            <div className="bg-gradient-to-r from-red-500 to-red-600 px-6 py-3 rounded-full border-2 border-yellow-500 font-bold text-xl animate-pulse">
+            <div className="text-green-400 text-lg">Playing: {userData.username}</div>
+            <div className="bg-gradient-to-r from-red-500 to-red-600 px-6 py-3 rounded-full border-2 border-yellow-500 font-bold text-xl">
               💰 ${userData.chips.toLocaleString()}
             </div>
           </div>
         </div>
       </header>
 
-      <div className="p-8 max-w-4xl mx-auto">
+      <div className="p-8 max-w-6xl mx-auto">
+        {/* Paytable */}
+        {showPaytable && (
+          <div className="bg-slate-800/95 border-2 border-purple-500 rounded-2xl p-6 mb-8">
+            <h3 className="text-2xl font-bold text-purple-400 text-center mb-6">💰 PAYTABLE 💰</h3>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {symbols.map((symbol, index) => (
+                <div key={index} className="bg-white/5 rounded-xl p-4 text-center border border-purple-400/30">
+                  <div className="text-4xl mb-2">{symbol.emoji}</div>
+                  <div className="text-purple-300 text-sm font-bold mb-1">{symbol.name}</div>
+                  <div className="text-yellow-400 text-xs">
+                    <div>3x: ${symbol.value * currentBet}</div>
+                    <div>4x: ${symbol.value * currentBet * 3}</div>
+                    <div>5x: ${symbol.value * currentBet * 10}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="text-center mt-4 text-green-400 text-sm">
+              💎 Diamonds contribute to jackpot! • 9 winning paylines • Must start from leftmost reel
+            </div>
+          </div>
+        )}
+
         {/* Stats Panel */}
         <div className="bg-slate-800/90 border-2 border-teal-400 rounded-2xl p-6 mb-8 grid grid-cols-2 md:grid-cols-6 gap-4">
           <div className="text-center p-3 bg-white/5 rounded-xl">
-            <div className="text-green-400 text-sm uppercase tracking-wide mb-1">Games Played</div>
+            <div className="text-green-400 text-sm uppercase tracking-wide mb-1">Games</div>
             <div className="text-yellow-400 text-xl font-bold">{sessionStats.totalGames}</div>
           </div>
           <div className="text-center p-3 bg-white/5 rounded-xl">
-            <div className="text-green-400 text-sm uppercase tracking-wide mb-1">Total Wins</div>
+            <div className="text-green-400 text-sm uppercase tracking-wide mb-1">Wins</div>
             <div className="text-green-400 text-xl font-bold">{sessionStats.totalWins}</div>
           </div>
           <div className="text-center p-3 bg-white/5 rounded-xl">
-            <div className="text-green-400 text-sm uppercase tracking-wide mb-1">Total Losses</div>
+            <div className="text-green-400 text-sm uppercase tracking-wide mb-1">Losses</div>
             <div className="text-red-400 text-xl font-bold">{sessionStats.totalLosses}</div>
           </div>
           <div className="text-center p-3 bg-white/5 rounded-xl">
@@ -388,38 +472,63 @@ export default function SlotsPage() {
             <div className="text-yellow-400 text-xl font-bold">{winRate}%</div>
           </div>
           <div className="text-center p-3 bg-white/5 rounded-xl">
-            <div className="text-green-400 text-sm uppercase tracking-wide mb-1">Net Winnings</div>
+            <div className="text-green-400 text-sm uppercase tracking-wide mb-1">Net</div>
             <div className={`text-xl font-bold ${netWinnings >= 0 ? 'text-green-400' : 'text-red-400'}`}>
               ${netWinnings}
             </div>
           </div>
           <div className="text-center p-3 bg-white/5 rounded-xl">
-            <div className="text-green-400 text-sm uppercase tracking-wide mb-1">Biggest Win</div>
+            <div className="text-green-400 text-sm uppercase tracking-wide mb-1">Best Win</div>
             <div className="text-green-400 text-xl font-bold">${sessionStats.biggestWin}</div>
           </div>
         </div>
 
         {/* Slot Machine */}
-        <div className="bg-slate-800/95 border-4 border-yellow-500 rounded-3xl p-8 shadow-2xl shadow-yellow-500/30">
-          <h2 className="text-4xl font-bold text-yellow-400 text-center mb-8">🎰 Lucky 7s 🎰</h2>
+        <div className="bg-slate-800/95 border-4 border-yellow-500 rounded-3xl p-8 shadow-2xl shadow-yellow-500/30 relative">
+          <h2 className="text-4xl font-bold text-yellow-400 text-center mb-8">💎 DIAMOND FORTUNE 💎</h2>
           
           {/* Reels */}
-          <div className="grid grid-cols-5 gap-3 mb-8 bg-black/50 p-6 rounded-2xl border-2 border-teal-400">
+          <div className="grid grid-cols-5 gap-4 mb-8 bg-black/70 p-8 rounded-2xl border-4 border-teal-400 relative overflow-hidden">
             {reels.map((column, colIndex) => (
-              <div key={colIndex} className="flex flex-col gap-2">
+              <div key={colIndex} className="flex flex-col gap-2 relative">
                 {column.map((symbol, rowIndex) => {
                   const isWinning = winningPositions.some(pos => pos.col === colIndex && pos.row === rowIndex);
+                  const isDiamond = symbol === '💎';
+                  const isDiamondAnimating = diamondAnimation.some(pos => pos.col === colIndex && pos.row === rowIndex);
+                  
                   return (
                     <div
                       key={`${colIndex}-${rowIndex}`}
-                      className={`w-20 h-20 bg-gradient-to-br from-slate-700 to-slate-800 border-2 border-teal-400 rounded-xl flex items-center justify-center text-4xl transition-all duration-300 ${
-                        isSpinning ? 'animate-spin' : ''
-                      } ${isWinning ? 'bg-gradient-to-br from-yellow-400 to-yellow-500 border-red-400 scale-110 shadow-lg shadow-yellow-400/60' : ''}`}
+                      className={`w-24 h-24 bg-gradient-to-br from-slate-700 to-slate-800 border-3 border-teal-400 rounded-xl flex items-center justify-center text-5xl transition-all duration-500 relative ${
+                        isSpinning ? 'animate-bounce' : ''
+                      } ${
+                        isWinning ? 'bg-gradient-to-br from-yellow-400 to-yellow-500 border-red-400 scale-110 shadow-lg shadow-yellow-400/60 animate-pulse' : ''
+                      } ${
+                        isDiamondAnimating ? 'animate-ping bg-gradient-to-br from-purple-400 to-pink-500' : ''
+                      }`}
                     >
                       {symbol}
+                      {isDiamond && !isSpinning && (
+                        <div className="absolute inset-0 bg-gradient-to-br from-purple-400/30 to-pink-400/30 rounded-xl animate-pulse"></div>
+                      )}
                     </div>
                   );
                 })}
+              </div>
+            ))}
+            
+            {/* Diamond fly animation */}
+            {diamondAnimation.map((pos, index) => (
+              <div
+                key={index}
+                className="absolute text-4xl animate-bounce z-50 pointer-events-none"
+                style={{
+                  left: `${(pos.col * 120) + 48}px`,
+                  top: `${(pos.row * 100) + 48}px`,
+                  animation: 'diamondFly 2s ease-out forwards'
+                }}
+              >
+                💎
               </div>
             ))}
           </div>
@@ -429,7 +538,7 @@ export default function SlotsPage() {
             {/* Bet Controls */}
             <div className="flex flex-wrap justify-center items-center gap-4">
               <span className="text-green-400 font-bold text-lg">Bet Amount:</span>
-              {[10, 25, 50, 100].map(amount => (
+              {[10, 25, 50, 100, 250].map(amount => (
                 <button
                   key={amount}
                   onClick={() => setBetAmount(amount)}
@@ -452,15 +561,15 @@ export default function SlotsPage() {
             <button
               onClick={spin}
               disabled={isSpinning || userData.chips < currentBet}
-              className="px-12 py-6 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white font-bold text-2xl rounded-2xl uppercase tracking-wider transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-red-500/50 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none relative overflow-hidden group"
+              className="px-16 py-8 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white font-bold text-3xl rounded-2xl uppercase tracking-wider transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-red-500/50 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none relative overflow-hidden group"
             >
               {isSpinning ? (
                 <span className="flex items-center justify-center">
-                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-white mr-3"></div>
-                  Spinning...
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-4 border-white mr-4"></div>
+                  SPINNING...
                 </span>
               ) : (
-                '🎰 SPIN THE REELS 🎰'
+                '🎰 SPIN TO WIN 🎰'
               )}
               <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent transform -skew-x-12 translate-x-full group-hover:translate-x-[-200%] transition-transform duration-1000"></div>
             </button>
@@ -468,8 +577,8 @@ export default function SlotsPage() {
             {/* Result Message */}
             {resultMessage && (
               <div className={`p-6 rounded-2xl font-bold text-xl text-center transition-all duration-300 ${
-                resultType === 'win' ? 'bg-green-500/20 text-green-400 border-2 border-green-500/50' :
-                resultType === 'jackpot' ? 'bg-yellow-500/20 text-yellow-400 border-2 border-yellow-500/50 animate-pulse' :
+                resultType === 'win' ? 'bg-green-500/20 text-green-400 border-2 border-green-500/50 animate-pulse' :
+                resultType === 'jackpot' ? 'bg-yellow-500/20 text-yellow-400 border-2 border-yellow-500/50 animate-bounce' :
                 resultType === 'lose' ? 'bg-red-500/20 text-red-400 border-2 border-red-500/50' :
                 'bg-teal-500/20 text-teal-400 border-2 border-teal-500/50'
               }`}>
@@ -479,6 +588,23 @@ export default function SlotsPage() {
           </div>
         </div>
       </div>
+
+      <style jsx>{`
+        @keyframes diamondFly {
+          0% {
+            transform: translateY(0) scale(1);
+            opacity: 1;
+          }
+          50% {
+            transform: translateY(-100px) scale(1.5);
+            opacity: 0.8;
+          }
+          100% {
+            transform: translateY(-200px) scale(0.5);
+            opacity: 0;
+          }
+        }
+      `}</style>
     </div>
   );
 }
