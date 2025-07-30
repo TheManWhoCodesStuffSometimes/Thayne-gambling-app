@@ -66,9 +66,12 @@ function DashboardContent() {
     if (gameType === 'slots') {
       // Navigate to slots page
       router.push('/slots');
+    } else if (gameType === 'lottery') {
+      // Navigate to lottery page
+      router.push('/lottery');
     } else if (gameType === 'history') {
       // Show game history
-      alert(`📈 Game History:\n\n🃏 Poker: 3 wins, 2 losses\n🂡 Blackjack: 1 win, 1 loss\n🎡 Roulette: 0 wins, 2 losses\n\nTotal: +$150 tonight!`);
+      alert(`📈 Game History:\n\n🃏 Poker: 3 wins, 2 losses\n🂡 Blackjack: 1 win, 1 loss\n🎡 Roulette: 0 wins, 2 losses\n🎟️ Lottery: 2 wins, 5 losses\n\nTotal: +$275 tonight!`);
     } else {
       alert(`🎰 Starting ${gameType.toUpperCase()}!\n\nPlayer: ${userData.username}\nBalance: $${userData.chips.toLocaleString()}\n\n(Game integration with n8n coming soon!)`);
     }
@@ -115,7 +118,7 @@ function DashboardContent() {
       {/* Games grid */}
       <div className="mb-12">
         <h2 className="text-4xl font-bold text-center text-yellow-400 mb-8">🎲 Casino Floor</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
           <div 
             onClick={() => playGame('slots')}
             className="bg-slate-800/90 border-2 border-teal-400 rounded-2xl p-8 text-center cursor-pointer transition-all duration-300 hover:transform hover:-translate-y-2 hover:border-yellow-500 hover:shadow-lg hover:shadow-yellow-500/30 group"
@@ -125,6 +128,18 @@ function DashboardContent() {
             <p className="text-green-400 mb-6">Spin the reels on your phone. Jackpots await!</p>
             <div className="bg-teal-400 text-slate-900 px-6 py-3 rounded-xl font-bold inline-block">
               Play Now
+            </div>
+          </div>
+
+          <div 
+            onClick={() => playGame('lottery')}
+            className="bg-slate-800/90 border-2 border-purple-400 rounded-2xl p-8 text-center cursor-pointer transition-all duration-300 hover:transform hover:-translate-y-2 hover:border-yellow-500 hover:shadow-lg hover:shadow-yellow-500/30 group"
+          >
+            <div className="text-6xl mb-4 group-hover:animate-spin">🎟️</div>
+            <h3 className="text-2xl font-bold text-yellow-400 mb-4">Lucky Lottery</h3>
+            <p className="text-green-400 mb-6">Pick your lucky numbers and win massive prizes!</p>
+            <div className="bg-purple-400 text-slate-900 px-6 py-3 rounded-xl font-bold inline-block">
+              Buy Tickets
             </div>
           </div>
 
