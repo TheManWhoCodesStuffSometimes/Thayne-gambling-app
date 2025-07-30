@@ -25,7 +25,7 @@ export default function CasinoLogin() {
     setStatusType('success');
 
     try {
-      const response = await fetch('/app/api/login', {
+      const response = await fetch('https://thayne-workflows.themanwhocodesstuffsometimes.com/webhook/casino-login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
